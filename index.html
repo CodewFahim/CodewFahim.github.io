@@ -565,11 +565,8 @@ const TERMINAL_SESSIONS = {
   }
 };
 
-// Two skill ribbons scroll in opposite directions behind the hero portrait: core skills up front, the rest behind.
-const RIBBON_SKILLS = {
-  core: SKILLS.flatMap(group => group.core),
-  rest: SKILLS.flatMap(group => group.items.filter(item => !group.core.includes(item)))
-};
+// Every skill, scrolling on a tape behind the hero portrait.
+const RIBBON_SKILLS = SKILLS.flatMap(group => group.items);
 
 // macOS window controls; the glyphs appear on hover, like the real ones.
 const MAC_DOTS = [{
@@ -698,7 +695,7 @@ h1, h2, h3 { text-wrap: balance; }
 }
 @keyframes badge-shimmer { 0% { transform: translateX(-120%); } 18%, 100% { transform: translateX(120%); } }
 
-/* Skill ribbons: two crossed tapes behind the portrait stack, each a duplicated track scrolled by half its width
+/* Skill ribbon: a tape behind the portrait stack, its track duplicated and scrolled by half its width
    so the loop is seamless. Ends fade out. */
 .ribbon {
   position: absolute;
@@ -710,18 +707,7 @@ h1, h2, h3 { text-wrap: balance; }
   mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
   animation: ribbon-in 1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.5s both;
 }
-.ribbon-front {
-  top: 24%;
-  rotate: -8deg;
-  background: linear-gradient(90deg, rgba(251, 146, 60, 0.05), rgba(251, 146, 60, 0.16) 50%, rgba(251, 146, 60, 0.05));
-  border-block: 1px solid rgba(251, 146, 60, 0.45);
-  color: #fdba74;
-  text-shadow: 0 0 12px rgba(251, 146, 60, 0.55);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 0 30px -8px rgba(251, 146, 60, 0.35);
-}
-.ribbon-back {
+.ribbon {
   top: 58%;
   rotate: 6deg;
   background: rgba(15, 23, 42, 0.55);
@@ -731,12 +717,9 @@ h1, h2, h3 { text-wrap: balance; }
   backdrop-filter: blur(4px);
 }
 @media (max-width: 639px) {
-  .ribbon { left: -30%; width: 160%; }
-  .ribbon-front { rotate: -6deg; }
-  .ribbon-back { rotate: 4deg; }
+  .ribbon { left: -30%; width: 160%; rotate: 4deg; }
 }
-.ribbon-track { display: flex; width: max-content; animation: ribbon-scroll 38s linear infinite; }
-.ribbon-back .ribbon-track { animation-direction: reverse; animation-duration: 46s; }
+.ribbon-track { display: flex; width: max-content; animation: ribbon-scroll 60s linear infinite reverse; }
 @keyframes ribbon-scroll { to { transform: translateX(-50%); } }
 @keyframes ribbon-in { from { opacity: 0; clip-path: inset(0 50% 0 50%); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
 
@@ -1213,6 +1196,13 @@ function Nav({
 /* Hero                                                                */
 /* ------------------------------------------------------------------ */
 
+// Keeps each word whole when a terminal line wraps on a phone (no breaks after "-" or "--").
+const words = text => text.split(" ").map((word, i) => /*#__PURE__*/React.createElement(Fragment, {
+  key: i
+}, i > 0 && " ", /*#__PURE__*/React.createElement("span", {
+  className: "whitespace-nowrap"
+}, word)));
+
 // The session as one run: the opening command, then its lines.
 const sessionItems = session => [{
   kind: "cmd",
@@ -1309,10 +1299,14 @@ function TerminalCard() {
   const typing = running && items[step]?.kind === "cmd" ? items[step] : null;
   const progress = running ? step / total : 1;
   const prompt = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "hidden min-[380px]:inline"
+  }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-300"
   }, TERMINAL_USER), /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
-  }, ":", session.cwd), " ", /*#__PURE__*/React.createElement("span", {
+  }, ":")), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, session.cwd), " ", /*#__PURE__*/React.createElement("span", {
     className: "text-orange-300"
   }, "$"), " ");
   const caret = /*#__PURE__*/React.createElement("span", {
@@ -1323,10 +1317,10 @@ function TerminalCard() {
     ref: rootRef,
     className: `overflow-hidden rounded-xl border bg-[#060b16]/95 shadow-2xl backdrop-blur transition-[border-color,box-shadow] duration-500 ${running ? "border-orange-400/30 shadow-[0_30px_70px_-30px_rgba(251,146,60,0.35)]" : "border-slate-700/70 shadow-black/60"}`
   }, /*#__PURE__*/React.createElement("div", {
-    className: "relative flex items-center gap-3 border-b border-slate-800 px-3 py-2"
+    className: "relative flex items-center gap-2 border-b border-slate-800 px-3 py-2 sm:gap-3"
   }, /*#__PURE__*/React.createElement("div", {
     "aria-hidden": "true",
-    className: "group/dots flex shrink-0 gap-1.5"
+    className: "group/dots flex shrink-0 gap-1.5 max-[359px]:hidden"
   }, MAC_DOTS.map(dot => /*#__PURE__*/React.createElement("span", {
     key: dot.color,
     className: `flex h-2.5 w-2.5 items-center justify-center rounded-full text-[8px] font-bold leading-none text-black/60 ${dot.color}`
@@ -1368,44 +1362,46 @@ function TerminalCard() {
     }
   })), /*#__PURE__*/React.createElement("div", {
     "aria-busy": running,
-    className: "min-h-[17rem] overflow-x-auto px-4 py-3.5 font-code text-[11px] leading-[1.375rem] sm:text-[12px]"
+    className: "min-h-[17rem] overflow-x-auto px-3.5 sm:px-4 py-3.5 font-code text-[11px] leading-[1.375rem] sm:text-[12px]"
   }, revealed.map((line, i) => {
     const pending = running && i === step - 1;
     if (line.kind === "test") {
       return /*#__PURE__*/React.createElement("div", {
         key: `${tab}-${i}`,
-        className: "line-in flex items-center gap-2 whitespace-nowrap pl-2"
+        className: "line-in flex items-start gap-2 pl-2 sm:whitespace-nowrap"
       }, pending ? /*#__PURE__*/React.createElement(LoaderCircle, {
-        className: "h-3 w-3 shrink-0 animate-spin text-slate-400"
+        className: "mt-[5px] h-3 w-3 shrink-0 animate-spin text-slate-400"
       }) : /*#__PURE__*/React.createElement(Check, {
-        className: "pop h-3 w-3 shrink-0 text-emerald-400",
+        className: "pop mt-[5px] h-3 w-3 shrink-0 text-emerald-400",
         strokeWidth: 3
       }), /*#__PURE__*/React.createElement("span", {
+        className: "min-w-0"
+      }, /*#__PURE__*/React.createElement("span", {
         className: "text-slate-300"
-      }, line.file), /*#__PURE__*/React.createElement("span", {
+      }, line.file), " ", /*#__PURE__*/React.createElement("span", {
         className: "text-slate-500"
-      }, "› ", line.name));
+      }, "› ", words(line.name))));
     }
     if (line.kind === "cmd") {
       return /*#__PURE__*/React.createElement("div", {
         key: `${tab}-${i}`,
-        className: "whitespace-nowrap"
+        className: "pl-[2ch] -indent-[2ch] sm:whitespace-nowrap sm:pl-0 sm:indent-0"
       }, prompt, /*#__PURE__*/React.createElement("span", {
         className: "text-slate-100"
-      }, line.text));
+      }, words(line.text)));
     }
     return /*#__PURE__*/React.createElement("div", {
       key: `${tab}-${i}`,
-      className: `line-in whitespace-nowrap ${line.kind === "info" ? "text-slate-400" : "pl-2 text-slate-500"}`
+      className: `line-in break-words sm:whitespace-nowrap ${line.kind === "info" ? "text-slate-400" : "pl-2 text-slate-500"}`
     }, line.text);
   }), typing && /*#__PURE__*/React.createElement("div", {
-    className: "whitespace-nowrap"
+    className: "pl-[2ch] -indent-[2ch] sm:whitespace-nowrap sm:pl-0 sm:indent-0"
   }, prompt, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-100"
-  }, typing.text.slice(0, chars)), caret), !running && /*#__PURE__*/React.createElement(React.Fragment, null, session.summary && /*#__PURE__*/React.createElement("div", {
-    className: "rise mt-1.5 whitespace-nowrap font-medium text-emerald-400"
+  }, words(typing.text.slice(0, chars))), caret), !running && /*#__PURE__*/React.createElement(React.Fragment, null, session.summary && /*#__PURE__*/React.createElement("div", {
+    className: "rise mt-1.5 break-words sm:whitespace-nowrap font-medium text-emerald-400"
   }, session.summary), /*#__PURE__*/React.createElement("div", {
-    className: "mt-1.5 whitespace-nowrap"
+    className: "mt-1.5 break-words sm:whitespace-nowrap"
   }, prompt, caret))), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-2 font-code text-[10.5px] text-slate-500"
   }, /*#__PURE__*/React.createElement("span", {
@@ -1450,12 +1446,11 @@ function usePointerTilt(ref) {
   }, [ref]);
 }
 function SkillRibbon({
-  items,
-  front = false
+  items
 }) {
   return /*#__PURE__*/React.createElement("div", {
     "aria-hidden": "true",
-    className: `ribbon ${front ? "ribbon-front" : "ribbon-back"}`
+    className: "ribbon"
   }, /*#__PURE__*/React.createElement("div", {
     className: "ribbon-track"
   }, [0, 1].map(copy => /*#__PURE__*/React.createElement("div", {
@@ -1463,9 +1458,9 @@ function SkillRibbon({
     className: "flex shrink-0 items-center py-1.5"
   }, items.map(item => /*#__PURE__*/React.createElement("span", {
     key: item,
-    className: `flex items-center gap-4 whitespace-nowrap pl-4 font-code text-[10px] uppercase tracking-[0.16em] sm:text-[11px] ${front ? "font-medium" : ""}`
+    className: "flex items-center gap-4 whitespace-nowrap pl-4 font-code text-[10px] uppercase tracking-[0.16em] sm:text-[11px]"
   }, item, /*#__PURE__*/React.createElement("span", {
-    className: front ? "text-orange-400" : "text-slate-600"
+    className: "text-slate-600"
   }, "✦")))))));
 }
 const blockSave = event => event.preventDefault();
@@ -1477,10 +1472,7 @@ function PortraitStack() {
     ref: stackRef,
     className: "tilt-stage relative mx-auto w-full max-w-md 2xl:max-w-lg"
   }, /*#__PURE__*/React.createElement(SkillRibbon, {
-    items: RIBBON_SKILLS.rest
-  }), /*#__PURE__*/React.createElement(SkillRibbon, {
-    items: RIBBON_SKILLS.core,
-    front: true
+    items: RIBBON_SKILLS
   }), /*#__PURE__*/React.createElement("div", {
     className: "tilt relative"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1813,7 +1805,9 @@ function Hero() {
     onClick: navTo("case-study"),
     className: `group inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-white sm:border-transparent sm:px-0 sm:hover:border-transparent ${PROFILE.resume ? "" : "col-span-2"} ${focusRing}`
   }, /*#__PURE__*/React.createElement("span", {
-    className: "sm:hidden"
+    className: "min-[380px]:hidden"
+  }, "Case study"), /*#__PURE__*/React.createElement("span", {
+    className: "hidden min-[380px]:inline sm:hidden"
   }, "WOOW case study"), /*#__PURE__*/React.createElement("span", {
     className: "hidden sm:inline"
   }, "Read the WOOW case study"), /*#__PURE__*/React.createElement(ArrowDown, {
@@ -2616,7 +2610,7 @@ function Footer() {
   return /*#__PURE__*/React.createElement("footer", {
     className: "border-t border-slate-800/70 pb-[calc(2rem_+_env(safe-area-inset-bottom,0px))] pt-8"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "mx-auto flex max-w-6xl xl:max-w-7xl 2xl:max-w-[90rem] flex-col gap-4 px-5 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-8 xl:px-10"
+    className: "mx-auto flex max-w-6xl xl:max-w-7xl 2xl:max-w-[90rem] flex-col gap-4 px-5 pr-[4.75rem] text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-8 xl:px-10"
   }, /*#__PURE__*/React.createElement("p", null, "© ", new Date().getFullYear(), " ", PROFILE.name), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-x-5 gap-y-2"
   }, /*#__PURE__*/React.createElement("a", {
